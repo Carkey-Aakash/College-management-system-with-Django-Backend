@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Attendance Login - {{ event.title }}</title>
+</head>
+<body>
+    <h2>Login to mark attendance for "{{ event.title }}"</h2>
+
+    {% if errors %}
+        <div style="color:red;">
+            <ul>
+                {% for field, error_list in errors.items %}
+                    {% for error in error_list %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <input type="hidden" name="qr" value="{{ qr }}">
+        <button type="submit">Login & Mark Attendance</button>
+    </form>
+</body>
+</html>

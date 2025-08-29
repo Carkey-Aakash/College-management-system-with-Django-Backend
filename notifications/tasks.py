@@ -457,7 +457,7 @@ def send_registration_closing_reminders():
                 f"Registration for **{event.title}** closes in ~1 hour.\n\n"
                 f"📍 Venue: {event.venue}\n"
                 f"🕒 Time: {start} → {end}\n\n"
-                f"Register here: {_event_register_url(event.id)}"
+                f"Register here if you are authenticated if not login first then register.The link is: {_event_register_url(event.id)}"
             )
 
             create_notification(

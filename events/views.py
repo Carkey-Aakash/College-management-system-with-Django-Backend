@@ -12,7 +12,7 @@ from .serializers import EventSerializer, EventCreateSerializer, EventRegistrati
 from rest_framework.exceptions import PermissionDenied
 from .permissions import IsEventManagerOrReadOnly
 from users.models import CollegeStudent
-
+from django.utils.timezone import now
 from django.urls import reverse
 from django.http import HttpResponse
 from django.contrib.auth import authenticate, login
@@ -171,7 +171,7 @@ class EventListCreateView(generics.ListCreateAPIView):
                     f"📍 Venue: {event.venue}\n"
                     f"🕒 Time: {_fmt_dt(event.start_date)} → {_fmt_dt(event.end_date)}\n"
                     f"👥 Slots: {event.get_available_slots()} / {event.max_participants}\n\n"
-                    f"For further details  see the event page:\n{_event_api_url(event.id)} , and for registration see this link:\n{_event_register_url(event.id)}"
+                    f"Login to see further details:\n{_event_api_url(event.id)} , and for registration see this link:\n{_event_register_url(event.id)}"
                 )
                 create_notification(
                     recipient=student,
@@ -666,18 +666,31 @@ def register_for_event(request, event_id):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def cancel_registration(request, event_id):
-    # Cancel event registration
+    # """
+    # Students can cancel ONLY before the event starts.
+    # """
     event = get_object_or_404(Event, id=event_id)
+
+    # Block if the event has started (or already finished)
+    if now() >= event.start_date:
+        return Response(
+            {'error': 'You can no longer cancel. The event has already started.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     try:
         registration = EventRegistration.objects.get(event=event, student=request.user)
-        registration.status = 'cancelled'
-        registration.save()
-        return Response({'message': 'Registration cancelled successfully'})
     except EventRegistration.DoesNotExist:
-        return Response({'error': 'Registration not found'},
-                       status=status.HTTP_404_NOT_FOUND)
+        return Response({'error': 'Registration not found'}, status=status.HTTP_404_NOT_FOUND)
 
+    # Optional: if already cancelled, tell them
+    if registration.status == 'cancelled':
+        return Response({'message': 'Registration is already cancelled.'}, status=status.HTTP_200_OK)
+
+    registration.status = 'cancelled'
+    registration.save()
+
+    return Response({'message': 'Registration cancelled successfully'}, status=status.HTTP_200_OK)
 
 @api_view(['GET', 'POST'])
 @csrf_exempt

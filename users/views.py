@@ -10,6 +10,7 @@ from django.contrib.auth.decorators import login_required
 from rest_framework import viewsets,permissions
 from rest_framework.viewsets import ModelViewSet
 from django.views.decorators.csrf import csrf_exempt
+from django.core.exceptions import ValidationError
 from events.models import Event
 # Create your views here.
 

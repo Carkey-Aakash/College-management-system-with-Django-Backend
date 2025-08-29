@@ -41,7 +41,7 @@ class User(AbstractUser):
         ('Other', 'Other'),
     ]
 
-    role=models.CharField(max_length=20, choices=USER_ROLES,default='student')
+    role=models.CharField(max_length=20, choices=USER_ROLES,default='Student')
     department=models.CharField(max_length=50, choices=DEPARTMENTS, null=True, blank=True)
     organization=models.CharField(max_length=50, choices=ORGANIZATIONS, null=True, blank=True)
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, null=True, blank=True)
@@ -107,7 +107,7 @@ class Profile(models.Model):
     YEAR_CHOICES = [(str(i), f'{i} Year') for i in range(1, 5)]  # 1 to 4
     SEMESTER_CHOICES = [(str(i), f'{i} Semester') for i in range(1, 9)]  # 1 to 8
     
-    class_name = models.CharField(max_length=50, choices=CLASS_CHOICES)
+    class_name = models.CharField(max_length=50, choices=CLASS_CHOICES, blank=True, null=True)
     year = models.CharField(max_length=2, choices=YEAR_CHOICES, blank=True, null=True)
     semester = models.CharField(max_length=2, choices=SEMESTER_CHOICES, blank=True, null=True)
 

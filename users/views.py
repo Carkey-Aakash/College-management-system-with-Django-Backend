@@ -212,25 +212,25 @@ def update_profile(request):
     data = request.data
 
     allowed_fields = [
-        'first_name', 'last_name', 'phone_number', 'email','department','organization',
+        'first_name', 'last_name', 'phone_number', 'email', 'department', 'organization',
         'bio', 'semester', 'year', 'class_name', 'address', 'interests'
     ]
 
-    # Check for invalid fields
+    # 1) Reject unknown fields
     invalid_fields = [field for field in data.keys() if field not in allowed_fields]
     if invalid_fields:
         return Response({
             "message": f"Only allowed fields can be updated: {', '.join(allowed_fields)}"
         }, status=status.HTTP_400_BAD_REQUEST)
 
-    # Update User fields
+    # 2) Update User basic fields
     user.first_name = data.get('first_name', user.first_name)
     user.last_name = data.get('last_name', user.last_name)
     user.phone_number = data.get('phone_number', user.phone_number)
     user.email = data.get('email', user.email)
     user.save()
 
-    # Update Profile
+    # 3) Fetch profile
     try:
         profile = user.profile
     except Profile.DoesNotExist:
@@ -239,38 +239,55 @@ def update_profile(request):
             status=404
         )
 
-    # Validate class_name
+    # 4) Resolve incoming values (keep old if not provided)
     class_name = data.get('class_name', profile.class_name)
-    if user.is_student() and class_name not in dict(Profile.CLASS_CHOICES):
-        return Response({'error': f'Invalid class_name. Must be one of: {", ".join(dict(Profile.CLASS_CHOICES).keys())}'}, status=400)
-    profile.class_name = class_name
-
-    # Validate year and semester
     year = data.get('year', profile.year)
     semester = data.get('semester', profile.semester)
 
-    if year and year not in dict(Profile.YEAR_CHOICES):
-        return Response({'error': f'Invalid year. Must be one of: {", ".join(dict(Profile.YEAR_CHOICES).keys())}'}, status=400)
-    if semester and semester not in dict(Profile.SEMESTER_CHOICES):
-        return Response({'error': f'Invalid semester. Must be one of: {", ".join(dict(Profile.SEMESTER_CHOICES).keys())}'}, status=400)
+    # 5) Student-only validations
+    if user.is_student():
+        # class_name must be present and valid
+        if not class_name:
+            return Response({'error': "For students, 'class_name' is required."}, status=400)
+        if class_name not in dict(Profile.CLASS_CHOICES):
+            return Response({'error': f"Invalid class_name. Must be one of: {', '.join(dict(Profile.CLASS_CHOICES).keys())}"}, status=400)
 
+        # at least one of year/semester
+        if not (year or semester):
+            return Response({'error': "For students, either 'semester' or 'year' must be provided."}, status=400)
+
+        # If provided, ensure they are valid choices (your model choices also enforce this)
+        if year and year not in dict(Profile.YEAR_CHOICES):
+            return Response({'error': f"Invalid year. Must be one of: {', '.join(dict(Profile.YEAR_CHOICES).keys())}"}, status=400)
+        if semester and semester not in dict(Profile.SEMESTER_CHOICES):
+            return Response({'error': f"Invalid semester. Must be one of: {', '.join(dict(Profile.SEMESTER_CHOICES).keys())}"}, status=400)
+
+    else:
+        # Non-students: allow empty/null class_name/year/semester
+        # If you want to explicitly clear them when client sends empty string:
+        if data.get('class_name') == '':
+            class_name = None
+        if data.get('year') == '':
+            year = None
+        if data.get('semester') == '':
+            semester = None
+
+    # 6) Save profile fields
+    profile.class_name = class_name
     profile.year = year
     profile.semester = semester
-
-    # Ensure either year or semester is provided
-    if user.is_student() and not (profile.year or profile.semester):
-        return Response(
-            {'error': 'For students, either semester or year must be provided along with class_name.'},
-            status=400
-        )
-
-    # Update remaining fields
     profile.bio = data.get('bio', profile.bio)
     profile.address = data.get('address', profile.address)
-    
+
     interests = data.get('interests')
-    if interests:
+    if interests is not None:
         profile.interests = ','.join(interests) if isinstance(interests, list) else interests
+
+    # Let model-level clean() run (will enforce student-only rules)
+    try:
+        profile.full_clean()
+    except ValidationError as e:
+        return Response({'error': e.message_dict if hasattr(e, 'message_dict') else e.messages}, status=400)
 
     profile.save()
 

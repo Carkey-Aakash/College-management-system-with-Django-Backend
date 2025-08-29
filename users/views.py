@@ -68,12 +68,100 @@ def logout_view(request):
         'message': 'Logout successful'
     }, status=status.HTTP_200_OK)
 
-class UserProfileView(generics.RetrieveAPIView):
+# ---------------- helpers ----------------
+def normalize_nullable(value):
+    # """Convert 'null'/'None'/'' to None."""
+    if value in ("null", "None", "", None):
+        return None
+    return value
+
+def choice_keys(choices):
+    return set(k for k, _ in choices)
+
+def validate_dept_org_choices(dept, org):
+    # """Validate department/organization values (if provided) against model choices."""
+    if dept:
+        valid_depts = choice_keys(User.DEPARTMENTS)
+        if dept not in valid_depts:
+            return Response(
+                {'error': f"Invalid department. Must be one of: {', '.join(sorted(valid_depts))}"},
+                status=400
+            )
+    if org:
+        valid_orgs = choice_keys(User.ORGANIZATIONS)
+        if org not in valid_orgs:
+            return Response(
+                {'error': f"Invalid organization. Must be one of: {', '.join(sorted(valid_orgs))}"},
+                status=400
+            )
+    return None
+
+def validate_dept_org_for_role(user, dept, org):
+    # """
+    # Role-based rules:
+    #   - Student: both allowed (optional)
+    #   - Department: department required; organization must be empty
+    #   - Organization: organization required; department must be empty
+    #   - Campus-cheif/Admin: both optional
+    # """
+    if user.is_department():
+        if not dept:
+            return Response({'error': "For role 'Department', 'department' is required."}, status=400)
+        return (dept, None)
+    elif user.is_organization():
+        if not org:
+            return Response({'error': "For role 'Organization', 'organization' is required."}, status=400)
+        return (None, org)
+    else:
+        # Student / Campus-cheif / Admin
+        return (dept, org)
+
+def validate_student_academics(user, class_name, year, semester):
+    # """Students: class_name required; at least one of year/semester; validate choices."""
+    if not user.is_student():
+        return None
+
+    if not class_name:
+        return Response({'error': "For students, 'class_name' is required."}, status=400)
+
+    valid_classes = choice_keys(Profile.CLASS_CHOICES)
+    if class_name not in valid_classes:
+        return Response(
+            {'error': f"Invalid class_name. Must be one of: {', '.join(sorted(valid_classes))}"},
+            status=400
+        )
+
+    if not (year or semester):
+        return Response({'error': "For students, either 'semester' or 'year' must be provided."}, status=400)
+
+    if year:
+        valid_years = choice_keys(Profile.YEAR_CHOICES)
+        if year not in valid_years:
+            return Response(
+                {'error': f"Invalid year. Must be one of: {', '.join(sorted(valid_years))}"},
+                status=400
+            )
+    if semester:
+        valid_sems = choice_keys(Profile.SEMESTER_CHOICES)
+        if semester not in valid_sems:
+            return Response(
+                {'error': f"Invalid semester. Must be one of: {', '.join(sorted(valid_sems))}"},
+                status=400
+            )
+    return None
+# -------------- end helpers --------------
+
+
+class UserProfileView(generics.GenericAPIView):
+    # """
+    # GET  /profile/         -> retrieve current user's profile
+    # POST /profile/         -> create profile (once) with role-based rules
+    # """
     serializer_class = UserProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    def get_object(self):
-        return self.request.user
+    def get(self, request):
+        return Response(self.get_serializer(request.user).data)
 
     def post(self, request):
         user = request.user
@@ -82,209 +170,143 @@ class UserProfileView(generics.RetrieveAPIView):
         if hasattr(user, 'profile'):
             return Response({'error': 'Profile already exists. Use /profile/update/ to modify.'}, status=400)
 
-        required_fields = ['first_name', 'last_name']
+        # required for everyone
+        for f in ('first_name', 'last_name'):
+            if not data.get(f):
+                return Response({'error': f"Missing required field: {f}"}, status=400)
 
-        if user.is_student():
-            required_fields.append('class_name')
-            if not (data.get('semester') or data.get('year')):
-                return Response(
-                    {'error': 'For students, either semester or year must be provided along with class_name.'},
-                    status=400
-                )
+        # dept/org (normalize + validate choices + role rules)
+        dept = normalize_nullable(data.get('department'))
+        org  = normalize_nullable(data.get('organization'))
 
-        missing_fields = [field for field in required_fields if not data.get(field)]
-        if missing_fields:
-            return Response({'error': f'Missing required fields: {", ".join(missing_fields)}'}, status=400)
+        err = validate_dept_org_choices(dept, org)
+        if err:
+            return err
 
-        user.first_name = data.get('first_name', user.first_name)
-        user.last_name = data.get('last_name', user.last_name)
+        res = validate_dept_org_for_role(user, dept, org)
+        if isinstance(res, Response):
+            return res
+        dept, org = res
+
+        # academic fields
+        class_name = normalize_nullable(data.get('class_name'))
+        year       = normalize_nullable(data.get('year'))
+        semester   = normalize_nullable(data.get('semester'))
+
+        stud_err = validate_student_academics(user, class_name, year, semester)
+        if stud_err:
+            return stud_err
+
+        # non-students must have academics empty
+        if not user.is_student():
+            class_name, year, semester = None, None, None
+
+        # save user
+        user.first_name   = data.get('first_name', user.first_name)
+        user.last_name    = data.get('last_name', user.last_name)
+        user.department   = dept
+        user.organization = org
         user.save()
 
-        # ===== Validate choices =====
-        class_name = data.get('class_name')
-        year = data.get('year')
-        semester = data.get('semester')
+        # create profile
+        interests_raw = data.get('interests', '')
+        interests = ','.join(interests_raw) if isinstance(interests_raw, list) else interests_raw
 
-        if user.is_student():
-            valid_classes = [choice[0] for choice in Profile.CLASS_CHOICES]
-            if class_name not in valid_classes:
-                return Response({'error': f'Invalid class_name. Must be one of: {", ".join(valid_classes)}'}, status=400)
-
-            valid_years = [choice[0] for choice in Profile.YEAR_CHOICES]
-            valid_semesters = [choice[0] for choice in Profile.SEMESTER_CHOICES]
-
-            if year and year not in valid_years:
-                return Response({'error': f'Invalid year. Must be one of: {", ".join(valid_years)}'}, status=400)
-            if semester and semester not in valid_semesters:
-                return Response({'error': f'Invalid semester. Must be one of: {", ".join(valid_semesters)}'}, status=400)
-
-            if not (year or semester):
-                return Response({'error': 'For students, either semester or year must be provided along with class_name.'}, status=400)
-        # ===== End validation =====
-
-        profile = Profile.objects.create(
+        profile = Profile(
             user=user,
             class_name=class_name,
             year=year,
             semester=semester,
             bio=data.get('bio', ''),
             address=data.get('address', ''),
-            interests=','.join(data.get('interests', [])) if isinstance(data.get('interests'), list) else data.get('interests', '')
+            interests=interests or ''
         )
 
-        serializer = self.get_serializer(user)
-        return Response({'message': 'Profile created successfully.', 'profile': serializer.data}, status=201)
+        try:
+            profile.full_clean()  # run model-level validation
+        except ValidationError as e:
+            return Response({'error': e.message_dict if hasattr(e, 'message_dict') else e.messages}, status=400)
 
+        profile.save()
 
-# @api_view(['PUT', 'PATCH'])
-# @permission_classes([permissions.IsAuthenticated])
-# def update_profile(request):
-#     user = request.user
-#     data = request.data
-
-#     allowed_fields = [
-#         'first_name', 'last_name', 'phone_number', 'email','department',
-#         'bio', 'semester', 'year', 'class_name', 'address', 'interests'
-#     ]
-
-#     invalid_fields = [field for field in data.keys() if field not in allowed_fields]
-#     if invalid_fields:
-#         return Response({
-#             "message": f"Only allowed fields can be updated: {', '.join(allowed_fields)}"
-#         }, status=status.HTTP_400_BAD_REQUEST)
-
-#     # Update User fields
-#     user.first_name = data.get('first_name', user.first_name)
-#     user.last_name = data.get('last_name', user.last_name)
-#     user.phone_number = data.get('phone_number', user.phone_number)
-#     user.email = data.get('email', user.email)
-#     user.save()
-
-#     try:
-#         profile = user.profile
-#     except Profile.DoesNotExist:
-#         return Response({'error': 'Profile does not exist. Please create it first using POST /profile/.'}, status=404)
-
-#     # ===== Validate class_name =====
-#     if 'class_name' in data:
-#         valid_classes = [choice[0] for choice in Profile.CLASS_CHOICES]
-#         if data['class_name'] not in valid_classes:
-#             return Response({'error': f'Invalid class_name. Must be one of: {", ".join(valid_classes)}'}, status=400)
-#         profile.class_name = data['class_name']
-
-#     # ===== Validate year =====
-#     if 'year' in data:
-#         valid_years = [choice[0] for choice in Profile.YEAR_CHOICES]
-#         if data['year'] and data['year'] not in valid_years:
-#             return Response({'error': f'Invalid year. Must be one of: {", ".join(valid_years)}'}, status=400)
-#         profile.year = data['year']
-
-#     # ===== Validate semester =====
-#     if 'semester' in data:
-#         valid_semesters = [choice[0] for choice in Profile.SEMESTER_CHOICES]
-#         if data['semester'] and data['semester'] not in valid_semesters:
-#             return Response({'error': f'Invalid semester. Must be one of: {", ".join(valid_semesters)}'}, status=400)
-#         profile.semester = data['semester']
-
-#     # Ensure at least one of year or semester for students
-#     if user.is_student() and not (profile.year or profile.semester):
-#         return Response({'error': 'For students, either semester or year must be provided along with class_name.'}, status=400)
-
-#     # Update remaining fields
-#     profile.bio = data.get('bio', profile.bio)
-#     profile.address = data.get('address', profile.address)
-
-#     interests = data.get('interests')
-#     if interests:
-#         profile.interests = ','.join(interests) if isinstance(interests, list) else interests
-
-#     profile.save()
-
-#     return Response({
-#         'message': 'Profile updated successfully.',
-#         'profile': UserProfileSerializer(user).data
-#     }, status=status.HTTP_200_OK)
+        return Response(
+            {'message': 'Profile created successfully.', 'profile': self.get_serializer(user).data},
+            status=201
+        )
 
 
 @api_view(['PUT', 'PATCH'])
 @permission_classes([permissions.IsAuthenticated])
 def update_profile(request):
+    # """
+    # PUT/PATCH /profile/update/
+    # Updates user + profile with the same role-based rules.
+    # """
     user = request.user
     data = request.data
 
     allowed_fields = [
-        'first_name', 'last_name', 'phone_number', 'email', 'department', 'organization',
+        'first_name', 'last_name', 'phone_number', 'email',
+        'department', 'organization',
         'bio', 'semester', 'year', 'class_name', 'address', 'interests'
     ]
-
-    # 1) Reject unknown fields
-    invalid_fields = [field for field in data.keys() if field not in allowed_fields]
+    invalid_fields = [f for f in data.keys() if f not in allowed_fields]
     if invalid_fields:
-        return Response({
-            "message": f"Only allowed fields can be updated: {', '.join(allowed_fields)}"
-        }, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"message": f"Only allowed fields can be updated: {', '.join(allowed_fields)}"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
-    # 2) Update User basic fields
-    user.first_name = data.get('first_name', user.first_name)
-    user.last_name = data.get('last_name', user.last_name)
+    # update user basics
+    user.first_name   = data.get('first_name', user.first_name)
+    user.last_name    = data.get('last_name', user.last_name)
     user.phone_number = data.get('phone_number', user.phone_number)
-    user.email = data.get('email', user.email)
+    user.email        = data.get('email', user.email)
+
+    # dept/org normalize + choices + role rules
+    dept = normalize_nullable(data.get('department', user.department))
+    org  = normalize_nullable(data.get('organization', user.organization))
+
+    err = validate_dept_org_choices(dept, org)
+    if err:
+        return err
+
+    res = validate_dept_org_for_role(user, dept, org)
+    if isinstance(res, Response):
+        return res
+    dept, org = res
+
+    user.department   = dept
+    user.organization = org
     user.save()
 
-    # 3) Fetch profile
+    # profile
     try:
         profile = user.profile
     except Profile.DoesNotExist:
-        return Response(
-            {'error': 'Profile does not exist. Please create it first using POST /profile/.'},
-            status=404
-        )
+        return Response({'error': 'Profile does not exist. Please create it first using POST /profile/.'}, status=404)
 
-    # 4) Resolve incoming values (keep old if not provided)
-    class_name = data.get('class_name', profile.class_name)
-    year = data.get('year', profile.year)
-    semester = data.get('semester', profile.semester)
+    class_name = normalize_nullable(data.get('class_name', profile.class_name))
+    year       = normalize_nullable(data.get('year', profile.year))
+    semester   = normalize_nullable(data.get('semester', profile.semester))
 
-    # 5) Student-only validations
-    if user.is_student():
-        # class_name must be present and valid
-        if not class_name:
-            return Response({'error': "For students, 'class_name' is required."}, status=400)
-        if class_name not in dict(Profile.CLASS_CHOICES):
-            return Response({'error': f"Invalid class_name. Must be one of: {', '.join(dict(Profile.CLASS_CHOICES).keys())}"}, status=400)
+    stud_err = validate_student_academics(user, class_name, year, semester)
+    if stud_err:
+        return stud_err
 
-        # at least one of year/semester
-        if not (year or semester):
-            return Response({'error': "For students, either 'semester' or 'year' must be provided."}, status=400)
+    if not user.is_student():
+        class_name, year, semester = None, None, None
 
-        # If provided, ensure they are valid choices (your model choices also enforce this)
-        if year and year not in dict(Profile.YEAR_CHOICES):
-            return Response({'error': f"Invalid year. Must be one of: {', '.join(dict(Profile.YEAR_CHOICES).keys())}"}, status=400)
-        if semester and semester not in dict(Profile.SEMESTER_CHOICES):
-            return Response({'error': f"Invalid semester. Must be one of: {', '.join(dict(Profile.SEMESTER_CHOICES).keys())}"}, status=400)
-
-    else:
-        # Non-students: allow empty/null class_name/year/semester
-        # If you want to explicitly clear them when client sends empty string:
-        if data.get('class_name') == '':
-            class_name = None
-        if data.get('year') == '':
-            year = None
-        if data.get('semester') == '':
-            semester = None
-
-    # 6) Save profile fields
     profile.class_name = class_name
-    profile.year = year
-    profile.semester = semester
-    profile.bio = data.get('bio', profile.bio)
-    profile.address = data.get('address', profile.address)
+    profile.year       = year
+    profile.semester   = semester
+    profile.bio        = data.get('bio', profile.bio)
+    profile.address    = data.get('address', profile.address)
 
     interests = data.get('interests')
     if interests is not None:
-        profile.interests = ','.join(interests) if isinstance(interests, list) else interests
+        profile.interests = ','.join(interests) if isinstance(interests, list) else (interests or '')
 
-    # Let model-level clean() run (will enforce student-only rules)
     try:
         profile.full_clean()
     except ValidationError as e:
@@ -296,7 +318,6 @@ def update_profile(request):
         'message': 'Profile updated successfully.',
         'profile': UserProfileSerializer(user).data
     }, status=status.HTTP_200_OK)
-
 
 
 @api_view(['GET'])

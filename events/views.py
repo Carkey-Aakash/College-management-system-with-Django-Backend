@@ -400,53 +400,66 @@ class EventDetailView(generics.RetrieveUpdateDestroyAPIView):
         return super().destroy(request, *args, **kwargs)
 
 
-@api_view(['GET'])
+def _is_organizer(user) -> bool:
+    """
+    Treat department/organization users as 'organizers'.
+    Uses your helper methods if present; falls back to role string.
+    """
+    if hasattr(user, "is_department") and callable(user.is_department) and user.is_department():
+        return True
+    if hasattr(user, "is_organization") and callable(user.is_organization) and user.is_organization():
+        return True
+    # Fallback if your User model stores role as a string
+    return getattr(user, "role", "").lower() in {"department", "organization", "organizer"}
+
+
+@api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def pending_events_list(request):
     user = request.user
 
-    # Check if user is campus-chief or admin
-    if not (user.is_chief() or user.is_admin_user()):
+    if user.is_chief() or user.is_admin_user():
+        # chiefs/admins see all pending
+        qs = Event.objects.filter(status="pending").order_by("-created_at")
+    elif _is_organizer(user):
+        # organizers see only their own pending
+        qs = Event.objects.filter(status="pending", organizer=user).order_by("-created_at")
+    else:
+        # students/others cannot see pending list
         return Response(
-            {'error': 'You are not allowed to see the pending events.'},
-            status=status.HTTP_403_FORBIDDEN
+            {"error": "You are not allowed to see the pending events."},
+            status=status.HTTP_403_FORBIDDEN,
         )
 
-    # Get all events with status 'pending'
-    pending_events = Event.objects.filter(status='pending').order_by('-created_at')
+    if not qs.exists():
+        return Response({"message": "No any pending events."}, status=status.HTTP_200_OK)
 
-    if not pending_events.exists():
-        return Response(
-            {'message': 'No any pending events.'},
-            status=status.HTTP_200_OK
-        )
-
-    serializer = EventSerializer(pending_events, many=True)
+    serializer = EventSerializer(qs, many=True, context={"request": request})
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def cancelled_events_list(request):
     user = request.user
 
-    # Check if user is campus-chief or admin
-    if not (user.is_chief() or user.is_admin_user()):
+    if user.is_chief() or user.is_admin_user():
+        # chiefs/admins see all cancelled
+        qs = Event.objects.filter(status="cancelled").order_by("-updated_at")
+    elif _is_organizer(user):
+        # organizers see only their own cancelled
+        qs = Event.objects.filter(status="cancelled", organizer=user).order_by("-updated_at")
+    else:
+        # students/others cannot see cancelled list
         return Response(
-            {'error': 'You are not allowed to see the cancelled events.'},
-            status=status.HTTP_403_FORBIDDEN
+            {"error": "You are not allowed to see the cancelled events."},
+            status=status.HTTP_403_FORBIDDEN,
         )
 
-    # Get all events with status 'cancelled'
-    cancelled_events = Event.objects.filter(status='cancelled').order_by('-updated_at')
+    if not qs.exists():
+        return Response({"message": "No any cancelled events."}, status=status.HTTP_200_OK)
 
-    if not cancelled_events.exists():
-        return Response(
-            {'message': 'No any cancelled events.'},
-            status=status.HTTP_200_OK
-        )
-
-    serializer = EventSerializer(cancelled_events, many=True)
+    serializer = EventSerializer(qs, many=True, context={"request": request})
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 

@@ -1,44 +1,57 @@
-# College-management-system-with-Django-Backend
-College Management System — Django Backend
+# 🎓 College Management System (Backend) — Django + DRF
 
-A Django + DRF backend for managing a college: users & roles, events (request → approval → publish), registrations, feedback, certificates, and notifications.
+A robust backend system for managing college events, users, roles, certificates, attendance, and notifications.  
+Built using Django & Django REST Framework with a clear workflow for event lifecycle: **Create → Request Approval → Approve/Reject → Publish → Register → Feedback → Certificate.**
 
-Scope note: This project does not include any payment gateway integration.
+This repository contains **backend-only implementation**. The system can be easily connected to any frontend (React recommended).
 
-✨ Features
-
-Role-based auth: Students, Faculty/Department, Organization, Admin,Campus-Chief
-
-User & Profile: Departments, batches(semesters/years) , basic profile fields
-
-Events module: Create → submit for approval → approve/reject → publish
-
-Student actions: view approved events , Register / cancel registration, give feedback, view certificates
-
-Approvals & workflow: Status tracking (pending/approved/cancelled/completed)
-
-Notifications: In-app + email Notifications 
-
-Dashboards/Stats: Aggregate counts per role(Department,Admin,Student,campus-chief,organization)
-
-Clean DRF setup: Serializers, permissions, filters,.......
-
-Tasks ready: Celery beat artifacts present for periodic jobs (if you enable Celery)
+> **Note:** Payment Gateway Integration (Khalti/eSewa) is not included in this version.
 
 ---
 
-🛠 Tech Stack
+## ✨ Features
 
-Frameworks: Django 4.x, Django REST Framework
+### 👥 Role-Based Access
+- **Admin**
+- **Campus-Chief / Faculty / Department**
+- **Organization / Clubs**
+- **Students**
 
-Auth: Token based and Session based
+### 👤 User & Profile Management
+- Department & batch/semester mapping
+- Profile and basic user info fields
+- Auth using **Django Authentication + Token / Session**
 
-DB: PostgreSQL (recommended) but currently SQLite (dev)
+### 🎉 Event Management Workflow
+| Stage | Description |
+|------|-------------|
+| Create | Organizer submits event details |
+| Approval | Faculty/Campus-Chief/Administrator reviews |
+| Publish | Approved events become visible to students |
+| Participation | Students register or cancel registration |
+| Feedback | Students submit feedback after completion |
 
-CORS: django-cors-headers
+### ✅ Additional Features
+- **QR-based Attendance**
+- **In-App + Email Notifications**
+- **Auto Certificate Generation (PDF)**
+- **Dashboard Statistics for Each Role**
+- **Pluggable Celery Tasks for periodic jobs**
 
-Optional: Celery + Redis for async/periodic tasks; email backend for outbound mail
+---
 
+## 🛠 Tech Stack
+
+| Layer | Technology |
+|------|------------|
+| Backend | Django 4.x, Django REST Framework |
+| Auth | Session + Token Based Auth |
+| Database | SQLite (Dev) → PostgreSQL (Recommended for Deployment) |
+| Tasks (Optional) | Celery + Redis |
+| Email | Django Email Backend (Console for Dev) |
+| CORS | django-cors-headers |
+
+---
 
 🗂 #Project Structure
 ```
@@ -52,10 +65,10 @@ College-management-system-with-Django-Backend/
 ├─ media/                   # Uploaded media (dev)
 ├─ celerybeat-schedule.*    # Celery beat state files (optional tasks)
 └─ README.md
-
+```
 
 🚀 Getting Started
-
+```
 1) Clone & Create venv
 git clone https://github.com/Carkey-Aakash/College-management-system-with-Django-Backend.git
 cd College-management-system-with-Django-Backend

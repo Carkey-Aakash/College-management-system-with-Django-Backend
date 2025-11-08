@@ -13,8 +13,9 @@ This repository contains **backend-only implementation**. The system can be easi
 
 ### 👥 Role-Based Access
 - **Admin**
-- **Campus-Chief / Faculty / Department**
-- **Organization / Clubs**
+- **Campus-Chief**
+- **Organization / Faculty**
+- **Department**
 - **Students**
 
 ### 👤 User & Profile Management
@@ -26,7 +27,7 @@ This repository contains **backend-only implementation**. The system can be easi
 | Stage | Description |
 |------|-------------|
 | Create | Organizer submits event details |
-| Approval | Faculty/Campus-Chief/Administrator reviews |
+| Approval | Campus-Chief/Administrator reviews |
 | Publish | Approved events become visible to students |
 | Participation | Students register or cancel registration |
 | Feedback | Students submit feedback after completion |

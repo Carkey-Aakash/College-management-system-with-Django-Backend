@@ -5,7 +5,7 @@ A Django + DRF backend for managing a college: users & roles, events (request �
 
 Scope note: This project does not include any payment gateway integration.
 
-##✨ Features
+✨ #Features
 
 Role-based auth: Students, Faculty/Department, Organization, Admin,Campus-Chief
 
@@ -25,18 +25,7 @@ Clean DRF setup: Serializers, permissions, filters,.......
 
 Tasks ready: Celery beat artifacts present for periodic jobs (if you enable Celery)
 
-🗂 #Project Structure
-College-management-system-with-Django-Backend/
-├─ manage.py
-├─ eventify/                # Project config (settings, urls, asgi/wsgi)
-├─ users/                   # User model, roles, auth endpoints
-├─ events/                  # Events, approvals, registrations, feedback,attendance
-├─ notifications/           # Notification utilities (email/in-app)
-├─ certificate/             # Certificate generation/related endpoints
-├─ media/                   # Uploaded media (dev)
-├─ celerybeat-schedule.*    # Celery beat state files (optional tasks)
-└─ README.md
-
+---
 
 🛠 Tech Stack
 
@@ -49,6 +38,21 @@ DB: PostgreSQL (recommended) but currently SQLite (dev)
 CORS: django-cors-headers
 
 Optional: Celery + Redis for async/periodic tasks; email backend for outbound mail
+
+
+🗂 #Project Structure
+```
+College-management-system-with-Django-Backend/
+├─ manage.py
+├─ eventify/                # Project config (settings, urls, asgi/wsgi)
+├─ users/                   # User model, roles, auth endpoints
+├─ events/                  # Events, approvals, registrations, feedback,attendance
+├─ notifications/           # Notification utilities (email/in-app)
+├─ certificate/             # Certificate generation/related endpoints
+├─ media/                   # Uploaded media (dev)
+├─ celerybeat-schedule.*    # Celery beat state files (optional tasks)
+└─ README.md
+
 
 🚀 Getting Started
 ```

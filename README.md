@@ -5,7 +5,7 @@ A Django + DRF backend for managing a college: users & roles, events (request �
 
 Scope note: This project does not include any payment gateway integration.
 
-✨ #Features
+✨ Features
 
 Role-based auth: Students, Faculty/Department, Organization, Admin,Campus-Chief
 
@@ -55,7 +55,7 @@ College-management-system-with-Django-Backend/
 
 
 🚀 Getting Started
-```
+
 1) Clone & Create venv
 git clone https://github.com/Carkey-Aakash/College-management-system-with-Django-Backend.git
 cd College-management-system-with-Django-Backend
